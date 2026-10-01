@@ -5,42 +5,42 @@ data class GroqModelInfo(
     val name: String,
     val description: String,
     val contextWindow: String,
-    val speedRating: String, // e.g., "Ultra Fast (~800 tps)", "Fast (~300 tps)"
+    val speedRating: String,
     val isRecommended: Boolean = false
 )
 
 object GroqModels {
     val AVAILABLE_MODELS = listOf(
         GroqModelInfo(
-            id = "llama-3.3-70b-versatile",
-            name = "Llama 3.3 70B Versatile",
-            description = "State-of-the-art intelligence, ideal for complex assistant workflows and reasoning.",
+            id = "openai/gpt-oss-120b",
+            name = "GPT-OSS 120B",
+            description = "Flagship 120B open model by OpenAI for high-precision reasoning, multi-step planning, and agent autonomy.",
             contextWindow = "128k tokens",
-            speedRating = "Fast (~280 t/s)",
+            speedRating = "Fast (~250 t/s)",
             isRecommended = true
         ),
         GroqModelInfo(
-            id = "llama-3.1-8b-instant",
-            name = "Llama 3.1 8B Instant",
-            description = "Near-instantaneous inference speed, perfect for rapid hands-free voice interactions.",
+            id = "openai/gpt-oss-20b",
+            name = "GPT-OSS 20B",
+            description = "Ultra-responsive 20B open model by OpenAI built for instant voice commands and rapid execution.",
             contextWindow = "128k tokens",
-            speedRating = "Ultra Fast (~850 t/s)"
+            speedRating = "Ultra Fast (~750 t/s)"
         ),
         GroqModelInfo(
-            id = "mixtral-8x7b-32768",
-            name = "Mixtral 8x7B MoE",
-            description = "Mixture of Experts architecture for high-efficiency multi-domain problem solving.",
-            contextWindow = "32k tokens",
-            speedRating = "Ultra Fast (~500 t/s)"
+            id = "groq/compound",
+            name = "Groq Compound",
+            description = "Groq compound agent system tailored for native Android tool execution, system gestures, and multi-turn workflows.",
+            contextWindow = "128k tokens",
+            speedRating = "Ultra Fast (~800 t/s)"
         ),
         GroqModelInfo(
-            id = "gemma2-9b-it",
-            name = "Gemma 2 9B IT",
-            description = "Google instruction-tuned model running at ultra-high throughput on Groq LPU.",
-            contextWindow = "8k tokens",
-            speedRating = "Ultra Fast (~550 t/s)"
+            id = "qwen/qwen3.8-27b",
+            name = "Qwen 3.8 27B",
+            description = "Advanced 27B reasoning model with exceptional multilingual comprehension, logic, and mathematics.",
+            contextWindow = "64k tokens",
+            speedRating = "Ultra Fast (~450 t/s)"
         )
     )
 
-    const val DEFAULT_MODEL = "llama-3.3-70b-versatile"
+    const val DEFAULT_MODEL = "openai/gpt-oss-120b"
 }

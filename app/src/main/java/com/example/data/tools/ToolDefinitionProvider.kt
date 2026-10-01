@@ -40,7 +40,7 @@ object ToolDefinitionProvider {
                         "properties" to mapOf(
                             "seconds" to mapOf(
                                 "type" to "integer",
-                                "description" to "The duration of the timer in seconds (e.g., 300 for 5 minutes)."
+                                "description" to "The duration of the timer in seconds (e.g., 300 for 5 minutes, 600 for 10 minutes)."
                             ),
                             "message" to mapOf(
                                 "type" to "string",
@@ -158,6 +158,96 @@ object ToolDefinitionProvider {
                             )
                         ),
                         "required" to listOf("message")
+                    )
+                )
+            ),
+            ToolDto(
+                function = FunctionDefDto(
+                    name = "perform_system_gesture",
+                    description = "Performs an autonomous Android navigation gesture such as going Home, Back, opening Recents, pulling down Notifications, or Quick Settings.",
+                    parameters = mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "gesture" to mapOf(
+                                "type" to "string",
+                                "enum" to listOf("home", "back", "recents", "notifications", "quick_settings", "lock_screen"),
+                                "description" to "The system gesture to execute."
+                            )
+                        ),
+                        "required" to listOf("gesture")
+                    )
+                )
+            ),
+            ToolDto(
+                function = FunctionDefDto(
+                    name = "open_settings_page",
+                    description = "Opens a specific Android System Settings panel directly (Wi-Fi, Bluetooth, Battery, Display, Apps, Sound).",
+                    parameters = mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "settings_type" to mapOf(
+                                "type" to "string",
+                                "enum" to listOf("wifi", "bluetooth", "battery", "display", "sound", "apps", "date", "general"),
+                                "description" to "The type of settings page to launch."
+                            )
+                        ),
+                        "required" to listOf("settings_type")
+                    )
+                )
+            ),
+            ToolDto(
+                function = FunctionDefDto(
+                    name = "create_calendar_event",
+                    description = "Creates a calendar event or reminder on the user's Android calendar.",
+                    parameters = mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "title" to mapOf(
+                                "type" to "string",
+                                "description" to "Event title or summary."
+                            ),
+                            "description" to mapOf(
+                                "type" to "string",
+                                "description" to "Optional event details or notes."
+                            ),
+                            "minutes_from_now" to mapOf(
+                                "type" to "integer",
+                                "description" to "How many minutes from now the event should start (default 60)."
+                            )
+                        ),
+                        "required" to listOf("title")
+                    )
+                )
+            ),
+            ToolDto(
+                function = FunctionDefDto(
+                    name = "calculate_math",
+                    description = "Computes mathematical expressions and arithmetic calculations with precision.",
+                    parameters = mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "expression" to mapOf(
+                                "type" to "string",
+                                "description" to "The mathematical expression to evaluate (e.g., '145 * 0.18', '2^8', 'sqrt(144)')."
+                            )
+                        ),
+                        "required" to listOf("expression")
+                    )
+                )
+            ),
+            ToolDto(
+                function = FunctionDefDto(
+                    name = "click_ui_element",
+                    description = "Autonomous accessibility fallback: finds and clicks a button or interactive UI control on screen matching the given text label.",
+                    parameters = mapOf(
+                        "type" to "object",
+                        "properties" to mapOf(
+                            "target_text" to mapOf(
+                                "type" to "string",
+                                "description" to "The exact or partial text of the button or item on screen to click."
+                            )
+                        ),
+                        "required" to listOf("target_text")
                     )
                 )
             )

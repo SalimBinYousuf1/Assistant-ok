@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.data.api.GroqClient
 import com.example.data.local.ChatMessageDao
 import com.example.data.local.SettingsManager
+import com.example.data.model.AgentStep
 import com.example.data.model.ChatCompletionRequest
 import com.example.data.model.ChatMessage
 import com.example.data.model.MessageDto
@@ -13,12 +14,14 @@ import com.example.data.tools.ToolDefinitionProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 sealed class AssistantResponseResult {
     data class Success(
         val assistantMessage: ChatMessage,
-        val executedAction: ActionResult? = null
+        val steps: List<AgentStep> = emptyList(),
+        val lastExecutedAction: ActionResult? = null
     ) : AssistantResponseResult()
 
     data class Error(
@@ -77,7 +80,8 @@ class AssistantRepository(
 
     suspend fun processUserPrompt(
         prompt: String,
-        isVoice: Boolean
+        isVoice: Boolean,
+        onStepUpdate: ((AgentStep) -> Unit)? = null
     ): AssistantResponseResult = withContext(Dispatchers.IO) {
         val apiKey = settingsManager.getApiKey()
         if (apiKey.isBlank()) {
@@ -97,131 +101,190 @@ class AssistantRepository(
         val selectedModel = settingsManager.getSelectedModel()
         val systemPrompt = settingsManager.getSystemPrompt()
 
-        // Fetch recent conversation history for context (up to 8 messages)
-        val recentDbMessages = chatMessageDao.getRecentMessagesList(8).reversed()
+        // Maintain conversation context (up to last 10 messages)
+        val recentDbMessages = chatMessageDao.getRecentMessagesList(10).reversed()
 
         val apiMessages = mutableListOf<MessageDto>()
-        apiMessages.add(
-            MessageDto(role = "system", content = systemPrompt)
-        )
+        apiMessages.add(MessageDto(role = "system", content = systemPrompt))
 
         for (msg in recentDbMessages) {
             if (msg.role == "user" || msg.role == "assistant") {
-                apiMessages.add(
-                    MessageDto(
-                        role = msg.role,
-                        content = msg.content
-                    )
-                )
+                apiMessages.add(MessageDto(role = msg.role, content = msg.content))
             }
         }
 
         val tools = ToolDefinitionProvider.getAssistantTools()
-        val request = ChatCompletionRequest(
-            model = selectedModel,
-            messages = apiMessages,
-            temperature = 0.5f,
-            maxTokens = 800,
-            tools = tools,
-            toolChoice = "auto"
-        )
+        val executedSteps = mutableListOf<AgentStep>()
+        var lastActionResult: ActionResult? = null
+        var finalAssistantText = ""
+        var stepCounter = 1
+        val maxIterations = 5
 
-        try {
-            val response = GroqClient.groqService.createChatCompletion(
-                authorization = "Bearer $apiKey",
-                request = request
+        for (iteration in 0 until maxIterations) {
+            val request = ChatCompletionRequest(
+                model = selectedModel,
+                messages = apiMessages,
+                temperature = 0.4f,
+                maxTokens = 850,
+                tools = tools,
+                toolChoice = "auto"
             )
+
+            val response = try {
+                GroqClient.groqService.createChatCompletion(
+                    authorization = "Bearer $apiKey",
+                    request = request
+                )
+            } catch (e: Exception) {
+                Log.e("AssistantRepo", "Network error calling Groq", e)
+                val friendly = when {
+                    e is java.net.UnknownHostException -> "No internet connection. Please verify your connection."
+                    e is java.net.SocketTimeoutException -> "Request timed out waiting for Groq."
+                    else -> "Connection error: ${e.localizedMessage ?: "Unknown failure"}"
+                }
+                val errMessage = ChatMessage(
+                    role = "assistant",
+                    content = friendly,
+                    modelUsed = selectedModel,
+                    isError = true
+                )
+                insertMessage(errMessage)
+                return@withContext AssistantResponseResult.Error(friendly, e.message)
+            }
 
             if (!response.isSuccessful) {
                 val errorBody = response.errorBody()?.string() ?: ""
                 val parsedError = parseApiError(response.code(), errorBody)
-                val errorMessage = ChatMessage(
+                val errMessage = ChatMessage(
                     role = "assistant",
                     content = parsedError,
                     modelUsed = selectedModel,
-                    isVoice = false,
                     isError = true
                 )
-                insertMessage(errorMessage)
+                insertMessage(errMessage)
                 return@withContext AssistantResponseResult.Error(parsedError, errorBody)
             }
 
             val body = response.body()
-            val firstChoice = body?.choices?.firstOrNull()
-            val responseMessage = firstChoice?.message
+            val choice = body?.choices?.firstOrNull()
+            val messageDto = choice?.message
 
-            if (responseMessage == null) {
-                val errText = "Empty response received from Groq."
-                val errorMsg = ChatMessage(
-                    role = "assistant",
-                    content = errText,
-                    modelUsed = selectedModel,
-                    isError = true
-                )
-                insertMessage(errorMsg)
-                return@withContext AssistantResponseResult.Error(errText)
+            if (messageDto == null) {
+                break
             }
 
-            val toolCalls = responseMessage.toolCalls
+            val toolCalls = messageDto.toolCalls
             if (!toolCalls.isNullOrEmpty()) {
-                val toolCall = toolCalls.first()
-                val functionName = toolCall.function.name
-                val functionArgs = toolCall.function.arguments
+                // Agent planned tool execution step(s)
+                apiMessages.add(messageDto)
 
-                Log.d("AssistantRepo", "Executing tool: $functionName args: $functionArgs")
-                val actionResult = actionExecutor.execute(functionName, functionArgs)
+                for (toolCall in toolCalls) {
+                    val functionName = toolCall.function.name
+                    val functionArgs = toolCall.function.arguments
 
-                val spokenSummary = if (actionResult.success) {
-                    actionResult.summary
-                } else {
-                    "${actionResult.summary}. Let me know if you'd like to try again."
+                    val stepTitle = formatStepTitle(functionName, functionArgs)
+                    val activeStep = AgentStep(
+                        stepIndex = stepCounter++,
+                        title = stepTitle,
+                        toolName = functionName,
+                        status = "EXECUTING"
+                    )
+                    onStepUpdate?.invoke(activeStep)
+
+                    // Execute tool via Android APIs & Accessibility fallback
+                    val actionResult = actionExecutor.execute(functionName, functionArgs)
+                    lastActionResult = actionResult
+
+                    val completedStep = activeStep.copy(
+                        status = if (actionResult.success) "SUCCESS" else "FAILED",
+                        observation = actionResult.summary
+                    )
+                    executedSteps.add(completedStep)
+                    onStepUpdate?.invoke(completedStep)
+
+                    // Feed tool observation back to model
+                    apiMessages.add(
+                        MessageDto(
+                            role = "tool",
+                            toolCallId = toolCall.id,
+                            name = functionName,
+                            content = actionResult.summary + (if (actionResult.detail != null) " (${actionResult.detail})" else "")
+                        )
+                    )
                 }
-
-                val assistantMessage = ChatMessage(
-                    role = "assistant",
-                    content = spokenSummary,
-                    timestamp = System.currentTimeMillis(),
-                    modelUsed = selectedModel,
-                    isVoice = isVoice,
-                    actionType = actionResult.toolType,
-                    actionSummary = actionResult.summary,
-                    actionPayload = actionResult.payload ?: actionResult.detail,
-                    isError = !actionResult.success
-                )
-                insertMessage(assistantMessage)
-                return@withContext AssistantResponseResult.Success(
-                    assistantMessage = assistantMessage,
-                    executedAction = actionResult
-                )
+                // Next iteration allows the agent to observe results, recover from failure, or finalize
             } else {
-                val assistantText = responseMessage.content?.trim() ?: "No response generated."
-                val assistantMessage = ChatMessage(
-                    role = "assistant",
-                    content = assistantText,
-                    timestamp = System.currentTimeMillis(),
-                    modelUsed = selectedModel,
-                    isVoice = isVoice
-                )
-                insertMessage(assistantMessage)
-                return@withContext AssistantResponseResult.Success(
-                    assistantMessage = assistantMessage
-                )
+                // Agent produced final response text
+                finalAssistantText = messageDto.content?.trim() ?: ""
+                break
+            }
+        }
+
+        // If no explicit text was produced, synthesize from executed steps
+        if (finalAssistantText.isBlank()) {
+            finalAssistantText = if (executedSteps.isNotEmpty()) {
+                executedSteps.joinToString("\n") { "• ${it.observation ?: it.title}" }
+            } else {
+                "Task completed."
+            }
+        }
+
+        val stepsJson = if (executedSteps.isNotEmpty()) {
+            val jsonArr = JSONArray()
+            for (step in executedSteps) {
+                val obj = JSONObject().apply {
+                    put("stepIndex", step.stepIndex)
+                    put("title", step.title)
+                    put("toolName", step.toolName)
+                    put("status", step.status)
+                    put("observation", step.observation)
+                }
+                jsonArr.put(obj)
+            }
+            jsonArr.toString()
+        } else null
+
+        val assistantMessage = ChatMessage(
+            role = "assistant",
+            content = finalAssistantText,
+            timestamp = System.currentTimeMillis(),
+            modelUsed = selectedModel,
+            isVoice = isVoice,
+            actionType = lastActionResult?.toolType,
+            actionSummary = lastActionResult?.summary,
+            actionPayload = lastActionResult?.payload ?: lastActionResult?.detail,
+            stepsJson = stepsJson,
+            isError = lastActionResult?.success == false && executedSteps.all { it.status == "FAILED" }
+        )
+        insertMessage(assistantMessage)
+
+        return@withContext AssistantResponseResult.Success(
+            assistantMessage = assistantMessage,
+            steps = executedSteps,
+            lastExecutedAction = lastActionResult
+        )
+    }
+
+    private fun formatStepTitle(toolName: String, argsJson: String): String {
+        return try {
+            val args = if (argsJson.isNotBlank()) JSONObject(argsJson) else JSONObject()
+            when (toolName) {
+                "set_alarm" -> "Setting alarm for ${args.optInt("hour")}:${String.format("%02d", args.optInt("minute"))}"
+                "set_timer" -> "Setting ${args.optInt("seconds")}s countdown timer"
+                "toggle_flashlight" -> if (args.optBoolean("turn_on", true)) "Turning on flashlight" else "Turning off flashlight"
+                "open_app" -> "Opening ${args.optString("app_name")}"
+                "get_device_status" -> "Checking device status"
+                "get_weather" -> "Checking live weather for ${args.optString("location")}"
+                "search_web" -> "Searching web for '${args.optString("query")}'"
+                "perform_system_gesture" -> "Executing system gesture: ${args.optString("gesture").uppercase()}"
+                "open_settings_page" -> "Opening ${args.optString("settings_type").replaceFirstChar { it.uppercase() }} Settings"
+                "create_calendar_event" -> "Scheduling '${args.optString("title")}'"
+                "calculate_math" -> "Computing ${args.optString("expression")}"
+                "click_ui_element" -> "Clicking screen element '${args.optString("target_text")}'"
+                else -> "Running $toolName"
             }
         } catch (e: Exception) {
-            Log.e("AssistantRepo", "Network or processing error", e)
-            val friendlyError = when {
-                e is java.net.UnknownHostException -> "No internet connection. Please verify your Wi-Fi or cellular data."
-                e is java.net.SocketTimeoutException -> "Request timed out waiting for Groq. Please try again."
-                else -> "Connection error: ${e.localizedMessage ?: "Unknown failure"}"
-            }
-            val errorMsg = ChatMessage(
-                role = "assistant",
-                content = friendlyError,
-                modelUsed = selectedModel,
-                isError = true
-            )
-            insertMessage(errorMsg)
-            return@withContext AssistantResponseResult.Error(friendlyError, e.message)
+            "Running $toolName"
         }
     }
 

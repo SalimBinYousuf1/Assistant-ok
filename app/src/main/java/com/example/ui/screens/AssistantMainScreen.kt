@@ -66,9 +66,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChatMessage
 import com.example.ui.components.ActionExecutionCard
+import com.example.ui.components.AppleStatusCapsule
 import com.example.ui.components.GlassCard
 import com.example.ui.components.GlassTextField
 import com.example.ui.components.LiquidAssistantOrb
+import com.example.ui.components.MultiStepPlanCard
 import com.example.ui.components.WaveformVisualizer
 import com.example.ui.theme.FrostCyanDark
 import com.example.ui.theme.FrostCyanPrimary
@@ -94,15 +96,17 @@ fun AssistantMainScreen(
     val selectedModel by viewModel.selectedModel.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val actionNotice by viewModel.actionNotice.collectAsState()
+    val activePlanSteps by viewModel.activePlanSteps.collectAsState()
     val isDark = isSystemInDarkTheme()
 
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    // Auto scroll to bottom when messages update
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    // Auto scroll to bottom when messages or active plan steps update
+    LaunchedEffect(messages.size, activePlanSteps.size) {
+        val totalCount = messages.size + (if (activePlanSteps.isNotEmpty()) 1 else 0)
+        if (totalCount > 0) {
+            listState.animateScrollToItem(totalCount)
         }
     }
 
@@ -123,19 +127,19 @@ fun AssistantMainScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 12.dp, bottom = 8.dp),
+                .padding(top = 10.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
                 Text(
-                    text = "Salim Assistant",
+                    text = "Salim",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "Groq Ultra-Fast AI • $selectedModel",
+                    text = "Autonomous System Assistant • $selectedModel",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -165,7 +169,7 @@ fun AssistantMainScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (apiKey.isNotBlank()) "Ready" else "Set Key",
+                        text = if (apiKey.isNotBlank()) "Ready" else "Configure Key",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (apiKey.isNotBlank()) FrostEmeraldSuccess
                         else MaterialTheme.colorScheme.error,
@@ -175,7 +179,7 @@ fun AssistantMainScreen(
             }
         }
 
-        // Active Action or Error Banner
+        // Active Action or Error Notice Banner
         AnimatedVisibility(visible = actionNotice != null) {
             actionNotice?.let { notice ->
                 GlassCard(
@@ -209,13 +213,13 @@ fun AssistantMainScreen(
             }
         }
 
-        // Conversational Feed or Hero Orb Area
+        // Conversational Feed & Hero Assistant Orb
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentPadding = PaddingValues(vertical = 8.dp),
+            contentPadding = PaddingValues(vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Hero Orb Header
@@ -230,7 +234,7 @@ fun AssistantMainScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 20.dp, horizontal = 16.dp),
+                            .padding(vertical = 18.dp, horizontal = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         LiquidAssistantOrb(
@@ -256,25 +260,17 @@ fun AssistantMainScreen(
                             WaveformVisualizer(rmsDb = rmsDb, isListening = true)
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = if (partialText.isNotBlank()) "\"$partialText\"" else "Listening for voice command...",
+                                text = if (partialText.isNotBlank()) "\"$partialText\"" else "Listening...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = FrostCyanDark,
                                 fontWeight = FontWeight.Medium
                             )
                         } else if (isThinking) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = FrostIrisAccent
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Salim is thinking with Groq LPU...",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = FrostIrisAccent
-                                )
-                            }
+                            AppleStatusCapsule(
+                                text = if (activePlanSteps.isNotEmpty()) "Autonomous planning & executing (${activePlanSteps.size} steps)..."
+                                else "Salim is thinking with Groq LPU...",
+                                isLoading = true
+                            )
                         } else if (isSpeaking) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -285,14 +281,14 @@ fun AssistantMainScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Speaking response... (Tap orb to stop)",
+                                    text = "Speaking response (Tap orb to stop)",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = FrostEmeraldSuccess
                                 )
                             }
                         } else {
                             Text(
-                                text = "Tap the orb or speak hands-free",
+                                text = "Tap the orb to speak or type below",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -301,11 +297,11 @@ fun AssistantMainScreen(
                 }
             }
 
-            // Quick Prompt Chips
+            // Quick Shortcut Chips
             item {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp)
+                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
                 ) {
                     items(quickPrompts) { (prompt, icon) ->
                         Surface(
@@ -323,7 +319,7 @@ fun AssistantMainScreen(
                                     imageVector = icon,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
@@ -351,13 +347,23 @@ fun AssistantMainScreen(
                     }
                 )
             }
+
+            // Live Active Multi-Step Execution Plan
+            if (activePlanSteps.isNotEmpty() && isThinking) {
+                item {
+                    MultiStepPlanCard(
+                        steps = activePlanSteps,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+            }
         }
 
         // Bottom Input Row
         GlassCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 10.dp),
+                .padding(vertical = 8.dp),
             cornerRadius = 16.dp
         ) {
             Row(
@@ -369,7 +375,7 @@ fun AssistantMainScreen(
                 GlassTextField(
                     value = textInput,
                     onValueChange = { textInput = it },
-                    placeholder = "Ask Salim or command an action...",
+                    placeholder = "Ask Salim or command multi-step tasks...",
                     modifier = Modifier.weight(1f),
                     onSend = {
                         if (textInput.isNotBlank()) {
@@ -426,6 +432,7 @@ fun ChatMessageItem(
 ) {
     val isUser = message.role == "user"
     val isDark = isSystemInDarkTheme()
+    val steps = message.parseSteps()
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -458,8 +465,13 @@ fun ChatMessageItem(
             }
         }
 
-        // If an Android action was executed, show the Action Card
-        if (!message.actionType.isNullOrBlank() && !message.actionSummary.isNullOrBlank()) {
+        // If the message has multi-step execution steps, display the plan card!
+        if (steps.isNotEmpty()) {
+            MultiStepPlanCard(
+                steps = steps,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        } else if (!message.actionType.isNullOrBlank() && !message.actionSummary.isNullOrBlank()) {
             ActionExecutionCard(
                 actionType = message.actionType,
                 summary = message.actionSummary,
@@ -484,11 +496,11 @@ fun ChatMessageItem(
                     lineHeight = 20.sp
                 )
 
-                // Message action tools (Copy, Re-speak)
+                // Message action tools (Copy)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 6.dp),
+                        .padding(top = 4.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

@@ -9,12 +9,15 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.SalimApplication
 import com.example.data.local.SettingsManager
+import com.example.data.model.AgentStep
 import com.example.data.model.ChatMessage
 import com.example.data.repository.AssistantRepository
 import com.example.data.repository.AssistantResponseResult
+import com.example.data.system.PermissionManager
 import com.example.data.voice.HapticFeedbackHelper
 import com.example.data.voice.SpeechManager
 import com.example.data.voice.TtsManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +62,7 @@ class AssistantViewModel(
     val autoListenEnabled = settingsManager.autoListenFlow
     val systemPrompt = settingsManager.systemPromptFlow
     val themeMode = settingsManager.themeModeFlow
+    val isOnboardingCompleted = settingsManager.onboardingCompletedFlow
 
     val isListening: StateFlow<Boolean> = speechManager.isListening
     val rmsDb: StateFlow<Float> = speechManager.rmsDb
@@ -67,6 +71,9 @@ class AssistantViewModel(
 
     private val _isThinking = MutableStateFlow(false)
     val isThinking: StateFlow<Boolean> = _isThinking.asStateFlow()
+
+    private val _activePlanSteps = MutableStateFlow<List<AgentStep>>(emptyList())
+    val activePlanSteps: StateFlow<List<AgentStep>> = _activePlanSteps.asStateFlow()
 
     private val _currentTab = MutableStateFlow(AssistantNavTab.ASSISTANT)
     val currentTab: StateFlow<AssistantNavTab> = _currentTab.asStateFlow()
@@ -83,6 +90,12 @@ class AssistantViewModel(
     private val _micPermissionGranted = MutableStateFlow(false)
     val micPermissionGranted: StateFlow<Boolean> = _micPermissionGranted.asStateFlow()
 
+    private val _accessibilityActive = MutableStateFlow(false)
+    val accessibilityActive: StateFlow<Boolean> = _accessibilityActive.asStateFlow()
+
+    private val _defaultAssistantSet = MutableStateFlow(false)
+    val defaultAssistantSet: StateFlow<Boolean> = _defaultAssistantSet.asStateFlow()
+
     init {
         speechManager.onSpeechResult = { recognizedText ->
             processPrompt(recognizedText, isVoice = true)
@@ -92,8 +105,31 @@ class AssistantViewModel(
         }
     }
 
+    fun refreshSystemPermissions(context: Context) {
+        val mic = PermissionManager.isMicrophoneGranted(context)
+        _micPermissionGranted.value = mic
+
+        val acc = PermissionManager.isAccessibilityServiceEnabled(context)
+        _accessibilityActive.value = acc
+
+        val assist = PermissionManager.isDefaultAssistant(context)
+        _defaultAssistantSet.value = assist
+
+        // If user already has mic permission, auto-complete onboarding so they are never bothered again
+        if (mic && !settingsManager.isOnboardingCompleted()) {
+            settingsManager.setOnboardingCompleted(true)
+        }
+    }
+
+    fun completeOnboarding() {
+        settingsManager.setOnboardingCompleted(true)
+    }
+
     fun setMicPermissionGranted(granted: Boolean) {
         _micPermissionGranted.value = granted
+        if (granted) {
+            settingsManager.setOnboardingCompleted(true)
+        }
     }
 
     fun setTab(tab: AssistantNavTab) {
@@ -144,7 +180,23 @@ class AssistantViewModel(
 
         viewModelScope.launch {
             _isThinking.value = true
-            val result = repository.processUserPrompt(prompt, isVoice)
+            _activePlanSteps.value = emptyList()
+
+            val result = repository.processUserPrompt(
+                prompt = prompt,
+                isVoice = isVoice,
+                onStepUpdate = { updatedStep ->
+                    val currentList = _activePlanSteps.value.toMutableList()
+                    val existingIdx = currentList.indexOfFirst { it.stepIndex == updatedStep.stepIndex }
+                    if (existingIdx >= 0) {
+                        currentList[existingIdx] = updatedStep
+                    } else {
+                        currentList.add(updatedStep)
+                    }
+                    _activePlanSteps.value = currentList
+                }
+            )
+
             _isThinking.value = false
 
             when (result) {
@@ -152,8 +204,8 @@ class AssistantViewModel(
                     if (vibrateEnabled.value) {
                         hapticHelper.pulseActionSuccess()
                     }
-                    if (result.executedAction != null) {
-                        _actionNotice.value = result.executedAction.summary
+                    if (result.lastExecutedAction != null) {
+                        _actionNotice.value = result.lastExecutedAction.summary
                     }
                     if (ttsEnabled.value && !result.assistantMessage.isError) {
                         ttsManager.speak(
@@ -170,6 +222,10 @@ class AssistantViewModel(
                     _actionNotice.value = result.userFriendlyMessage
                 }
             }
+
+            // Keep visible for a brief moment then clear live plan buffer
+            delay(1200)
+            _activePlanSteps.value = emptyList()
         }
     }
 
@@ -251,6 +307,15 @@ class AssistantViewModel(
         viewModelScope.launch {
             repository.clearHistory()
         }
+    }
+
+    fun openAccessibilitySettings(context: Context) {
+        try {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (ignored: Exception) {}
     }
 
     fun openDefaultAssistantSettings(context: Context) {

@@ -12,12 +12,18 @@ class ExampleUnitTest {
 
     @Test
     fun `verify default Groq model configuration`() {
-        assertEquals("llama-3.3-70b-versatile", GroqModels.DEFAULT_MODEL)
-        assertTrue(GroqModels.AVAILABLE_MODELS.isNotEmpty())
+        assertEquals("openai/gpt-oss-120b", GroqModels.DEFAULT_MODEL)
+        assertEquals(4, GroqModels.AVAILABLE_MODELS.size)
+
+        val modelIds = GroqModels.AVAILABLE_MODELS.map { it.id }
+        assertTrue(modelIds.contains("openai/gpt-oss-120b"))
+        assertTrue(modelIds.contains("openai/gpt-oss-20b"))
+        assertTrue(modelIds.contains("groq/compound"))
+        assertTrue(modelIds.contains("qwen/qwen3.8-27b"))
 
         val recommended = GroqModels.AVAILABLE_MODELS.find { it.isRecommended }
         assertNotNull(recommended)
-        assertEquals("llama-3.3-70b-versatile", recommended?.id)
+        assertEquals("openai/gpt-oss-120b", recommended?.id)
     }
 
     @Test
@@ -25,7 +31,7 @@ class ExampleUnitTest {
         val message = ChatMessage(
             role = "assistant",
             content = "Alarm set for 7:00 AM",
-            modelUsed = "llama-3.3-70b-versatile",
+            modelUsed = "openai/gpt-oss-120b",
             isVoice = true,
             actionType = "ALARM",
             actionSummary = "Alarm set for 07:00",

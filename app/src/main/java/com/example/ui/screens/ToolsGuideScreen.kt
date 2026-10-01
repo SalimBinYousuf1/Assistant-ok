@@ -51,12 +51,17 @@ fun ToolsGuideScreen(
     val context = LocalContext.current
 
     val toolsList = listOf(
+        GuideItem("Autonomous Multi-Step Tasks", Icons.Default.Assistant, "Understands complex natural-language chains, plans multi-step tasks, and executes autonomously", "\"Check weather in Chicago, and if it's raining set an alarm for 7 AM and open Maps\""),
         GuideItem("Alarm Clock", Icons.Default.Alarm, "Set alarms instantly by voice", "\"Set alarm for 6:45 AM labelled Gym\""),
         GuideItem("Countdown Timer", Icons.Default.HourglassBottom, "Manage cooking, workouts, and work sprints", "\"Set a timer for 15 minutes\""),
+        GuideItem("System Gestures & Navigation", Icons.Default.TouchApp, "Autonomous navigation via accessibility (Home, Back, Recents, Notifications)", "\"Go home\", \"Go back\", \"Show notifications\""),
         GuideItem("Device Flashlight", Icons.Default.FlashlightOn, "Hands-free torch control via Camera API", "\"Turn on the flashlight\" or \"Turn off torch\""),
         GuideItem("App Launcher", Icons.Default.Apps, "Launch any installed app on your Android phone", "\"Open YouTube\", \"Launch Spotify\", \"Open Settings\""),
         GuideItem("Live Global Weather", Icons.Default.WbSunny, "Real-time temperature and weather forecasts", "\"What is the weather in Tokyo right now?\""),
         GuideItem("Device Status", Icons.Default.BatteryChargingFull, "Real-time battery level and charging state", "\"Check battery level\" or \"What's the system time?\""),
+        GuideItem("Settings Panels", Icons.Default.OpenInNew, "Direct shortcuts to Android settings panels", "\"Open Wi-Fi settings\", \"Open Bluetooth\""),
+        GuideItem("Calendar Scheduling", Icons.Default.Alarm, "Schedule calendar events and reminders", "\"Schedule doctor appointment in 120 minutes\""),
+        GuideItem("Math & Calculation", Icons.Default.Search, "Compute mathematical expressions and arithmetic", "\"Calculate 1450 * 0.18\""),
         GuideItem("Web Search", Icons.Default.Search, "Instant Google / Web queries via browser", "\"Search web for latest aerospace news\""),
         GuideItem("Phone Calls", Icons.Default.Call, "Quickly dial contacts and phone numbers", "\"Call 555-0199\""),
         GuideItem("Text Messaging", Icons.Default.Message, "Draft SMS messages quickly", "\"Send message to 555-0123 saying I will arrive soon\"")

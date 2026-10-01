@@ -471,8 +471,12 @@ fun SettingsScreen(
             }
         }
 
-        // Section 6: Device Permissions Info
+        // Section 6: System Permissions & Automation Integration
         item {
+            val micGranted by viewModel.micPermissionGranted.collectAsState()
+            val accActive by viewModel.accessibilityActive.collectAsState()
+            val defAssist by viewModel.defaultAssistantSet.collectAsState()
+
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 18.dp
@@ -482,7 +486,7 @@ fun SettingsScreen(
                         Icon(Icons.Default.Security, contentDescription = null, tint = FrostEmeraldSuccess, modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "App Permissions",
+                            text = "System Integration & Permissions",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -491,18 +495,90 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "• Audio Recording: for speech recognition\n• Alarms & Timers: to manage Clock events\n• Camera: for flashlight control\n• Network: to connect to Groq Cloud API",
+                        text = "Salim gets permissions once and never repeatedly asks. You can manage or inspect system access below.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 18.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Permission status items
+                    PermissionStatusItem(
+                        title = "Microphone Access",
+                        statusText = if (micGranted) "Granted ✓" else "Not Granted",
+                        isGranted = micGranted,
+                        onAction = { viewModel.openAppSettings(context) }
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    PermissionStatusItem(
+                        title = "Default Digital Assistant",
+                        statusText = if (defAssist) "Active ✓" else "Not Set",
+                        isGranted = defAssist,
+                        onAction = { viewModel.openDefaultAssistantSettings(context) }
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    PermissionStatusItem(
+                        title = "Accessibility Automation Service",
+                        statusText = if (accActive) "Active ✓" else "Disabled",
+                        isGranted = accActive,
+                        onAction = { viewModel.openAccessibilitySettings(context) }
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
                     GlassButton(
-                        text = "Manage Permissions in Android Settings",
+                        text = "Open App System Settings",
                         onClick = { viewModel.openAppSettings(context) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionStatusItem(
+    title: String,
+    statusText: String,
+    isGranted: Boolean,
+    onAction: () -> Unit
+) {
+    val isDark = isSystemInDarkTheme()
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isDark) FrostDarkSurfaceSubtle else FrostLightSurfaceSubtle,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (isGranted) FrostEmeraldSuccess.copy(alpha = 0.15f)
+                else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                modifier = Modifier.clickable(onClick = onAction)
+            ) {
+                Text(
+                    text = statusText,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isGranted) FrostEmeraldSuccess else MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
             }
         }
     }

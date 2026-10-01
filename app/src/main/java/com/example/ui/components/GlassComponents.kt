@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -520,6 +521,181 @@ fun GlassTextField(
         if (trailingIcon != null) {
             Spacer(modifier = Modifier.width(8.dp))
             trailingIcon()
+        }
+    }
+}
+
+@Composable
+fun MultiStepPlanCard(
+    steps: List<com.example.data.model.AgentStep>,
+    modifier: Modifier = Modifier
+) {
+    if (steps.isEmpty()) return
+
+    val isDark = isSystemInDarkTheme()
+
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        cornerRadius = 16.dp,
+        isElevated = true
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(FrostCyanPrimary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = FrostCyanPrimary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Autonomous Multi-Step Plan (${steps.size} steps)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            steps.forEachIndexed { index, step ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    // Status indicator pill
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (step.status) {
+                                    "EXECUTING" -> FrostIrisAccent.copy(alpha = 0.2f)
+                                    "FAILED" -> FrostRoseError.copy(alpha = 0.18f)
+                                    else -> FrostEmeraldSuccess.copy(alpha = 0.18f)
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when (step.status) {
+                            "EXECUTING" -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = FrostIrisAccent
+                                )
+                            }
+                            "FAILED" -> {
+                                Text(
+                                    text = "✕",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FrostRoseError
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    text = "✓",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = FrostEmeraldSuccess
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = step.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (!step.observation.isNullOrBlank()) {
+                            Text(
+                                text = step.observation,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                if (index < steps.size - 1) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppleStatusCapsule(
+    text: String,
+    modifier: Modifier = Modifier,
+    isLoading: Boolean = false
+) {
+    val isDark = isSystemInDarkTheme()
+    val shape = RoundedCornerShape(20.dp)
+
+    Surface(
+        modifier = modifier
+            .clip(shape)
+            .border(
+                1.dp,
+                if (isDark) FrostDarkBorderHighlight else FrostLightBorderHighlight,
+                shape
+            ),
+        color = if (isDark) FrostDarkSurfaceElevated.copy(alpha = 0.95f) else FrostLightSurfaceElevated.copy(alpha = 0.95f),
+        shape = shape,
+        tonalElevation = 6.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(13.dp),
+                    strokeWidth = 1.5.dp,
+                    color = FrostCyanDark
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(FrostEmeraldSuccess)
+                )
+                Spacer(modifier = Modifier.width(7.dp))
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

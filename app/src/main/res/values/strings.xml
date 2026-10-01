@@ -2,4 +2,5 @@
     <string name="app_name">Salim</string>
     <string name="assist_tile_label">Salim Assistant</string>
     <string name="assist_tile_description">Quickly summon Salim AI Assistant</string>
+    <string name="accessibility_service_description">Enables Salim Assistant to execute autonomous navigation, global gestures, and UI action fallbacks.</string>
 </resources>

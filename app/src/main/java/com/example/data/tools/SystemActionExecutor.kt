@@ -12,9 +12,12 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.provider.AlarmClock
+import android.provider.CalendarContract
+import android.provider.Settings
 import android.util.Log
 import com.example.data.api.GroqClient
 import com.example.data.model.FormattedWeatherData
+import com.example.service.SalimAccessibilityService
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
@@ -49,6 +52,11 @@ class SystemActionExecutor(private val context: Context) {
                 "search_web" -> executeSearchWeb(args)
                 "make_phone_call" -> executeMakePhoneCall(args)
                 "send_message" -> executeSendMessage(args)
+                "perform_system_gesture" -> executeSystemGesture(args)
+                "open_settings_page" -> executeOpenSettingsPage(args)
+                "create_calendar_event" -> executeCreateCalendarEvent(args)
+                "calculate_math" -> executeCalculateMath(args)
+                "click_ui_element" -> executeClickUiElement(args)
                 else -> ActionResult(
                     success = false,
                     summary = "Unknown tool requested: $toolName",
@@ -212,7 +220,6 @@ class SystemActionExecutor(private val context: Context) {
         val resolvedApps = pm.queryIntentActivities(mainIntent, 0)
         val lowerTarget = targetName.lowercase(Locale.getDefault())
 
-        // Find exact or closest match
         val matchedApp = resolvedApps.firstOrNull { resolveInfo ->
             val label = resolveInfo.loadLabel(pm).toString().lowercase(Locale.getDefault())
             label == lowerTarget || label.contains(lowerTarget) || resolveInfo.activityInfo.packageName.lowercase(Locale.getDefault()).contains(lowerTarget)
@@ -228,7 +235,7 @@ class SystemActionExecutor(private val context: Context) {
                 val appTitle = matchedApp.loadLabel(pm).toString()
                 ActionResult(
                     success = true,
-                    summary = "Opening $appTitle",
+                    summary = "Opened $appTitle",
                     toolType = "APP_LAUNCH",
                     payload = packageName
                 )
@@ -260,7 +267,7 @@ class SystemActionExecutor(private val context: Context) {
         val currentTime = SimpleDateFormat("h:mm a, EEEE, MMM d", Locale.getDefault()).format(Date())
         val chargeStatusText = if (isCharging) "Charging" else "Not charging"
 
-        val summary = "Battery: $batteryPct% ($chargeStatusText). Current time: $currentTime"
+        val summary = "Battery: $batteryPct% ($chargeStatusText). System time: $currentTime"
         return ActionResult(
             success = true,
             summary = summary,
@@ -311,15 +318,12 @@ class SystemActionExecutor(private val context: Context) {
         return when (code) {
             0 -> "Clear sky ☀️"
             1, 2, 3 -> "Mainly clear to overcast ⛅"
-            45, 48 -> "Fog and depositing rime fog 🌫️"
+            45, 48 -> "Fog 🌫️"
             51, 53, 55 -> "Drizzle 🌦️"
             61, 63, 65 -> "Rain 🌧️"
             71, 73, 75 -> "Snow fall ❄️"
-            77 -> "Snow grains ❄️"
             80, 81, 82 -> "Rain showers 🌧️"
-            85, 86 -> "Snow showers 🌨️"
-            95 -> "Thunderstorm ⛈️"
-            96, 99 -> "Thunderstorm with hail ⛈️"
+            95, 96, 99 -> "Thunderstorm ⛈️"
             else -> "Partly cloudy 🌤️"
         }
     }
@@ -347,7 +351,6 @@ class SystemActionExecutor(private val context: Context) {
                 payload = query
             )
         } catch (e: Exception) {
-            // Fallback to web browser search URL
             try {
                 val encoded = URLEncoder.encode(query, "UTF-8")
                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$encoded")).apply {
@@ -430,6 +433,249 @@ class SystemActionExecutor(private val context: Context) {
                 success = false,
                 summary = "No SMS application found: ${e.message}",
                 toolType = "MESSAGE"
+            )
+        }
+    }
+
+    private fun executeSystemGesture(args: JSONObject): ActionResult {
+        val gesture = args.optString("gesture", "home").lowercase(Locale.getDefault())
+        val service = SalimAccessibilityService.instance
+
+        if (service != null) {
+            val executed = when (gesture) {
+                "home" -> service.executeGlobalHome()
+                "back" -> service.executeGlobalBack()
+                "recents" -> service.executeGlobalRecents()
+                "notifications" -> service.executeGlobalNotifications()
+                "quick_settings" -> service.executeGlobalQuickSettings()
+                "lock_screen" -> service.executeGlobalLockScreen()
+                else -> false
+            }
+            return if (executed) {
+                ActionResult(
+                    success = true,
+                    summary = "Executed system gesture: ${gesture.uppercase()}",
+                    toolType = "GESTURE",
+                    payload = gesture
+                )
+            } else {
+                ActionResult(
+                    success = false,
+                    summary = "Failed to trigger $gesture gesture via accessibility service.",
+                    toolType = "GESTURE"
+                )
+            }
+        } else {
+            // Intent fallback for Home
+            if (gesture == "home") {
+                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(homeIntent)
+                return ActionResult(
+                    success = true,
+                    summary = "Navigated Home via system intent",
+                    toolType = "GESTURE",
+                    payload = "home"
+                )
+            }
+            return ActionResult(
+                success = false,
+                summary = "Accessibility Service is required for $gesture gesture. Please enable it in Settings.",
+                toolType = "GESTURE"
+            )
+        }
+    }
+
+    private fun executeOpenSettingsPage(args: JSONObject): ActionResult {
+        val type = args.optString("settings_type", "general").lowercase(Locale.getDefault())
+        val action = when (type) {
+            "wifi" -> Settings.ACTION_WIFI_SETTINGS
+            "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
+            "battery" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+            "display" -> Settings.ACTION_DISPLAY_SETTINGS
+            "sound" -> Settings.ACTION_SOUND_SETTINGS
+            "apps" -> Settings.ACTION_APPLICATION_SETTINGS
+            "date" -> Settings.ACTION_DATE_SETTINGS
+            else -> Settings.ACTION_SETTINGS
+        }
+
+        return try {
+            val intent = Intent(action).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            ActionResult(
+                success = true,
+                summary = "Opened ${type.replaceFirstChar { it.uppercase() }} Settings",
+                toolType = "SETTINGS",
+                payload = type
+            )
+        } catch (e: Exception) {
+            ActionResult(
+                success = false,
+                summary = "Could not open $type settings: ${e.message}",
+                toolType = "SETTINGS"
+            )
+        }
+    }
+
+    private fun executeCreateCalendarEvent(args: JSONObject): ActionResult {
+        val title = args.optString("title", "Salim Event").trim()
+        val desc = args.optString("description", "")
+        val minutesFromNow = args.optInt("minutes_from_now", 60)
+
+        val startTime = System.currentTimeMillis() + (minutesFromNow * 60 * 1000L)
+        val endTime = startTime + (60 * 60 * 1000L)
+
+        val intent = Intent(Intent.ACTION_INSERT).apply {
+            data = CalendarContract.Events.CONTENT_URI
+            putExtra(CalendarContract.Events.TITLE, title)
+            putExtra(CalendarContract.Events.DESCRIPTION, desc)
+            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startTime)
+            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endTime)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        return try {
+            context.startActivity(intent)
+            ActionResult(
+                success = true,
+                summary = "Opened Calendar to schedule '$title'",
+                toolType = "CALENDAR",
+                payload = title
+            )
+        } catch (e: Exception) {
+            ActionResult(
+                success = false,
+                summary = "Calendar app not available: ${e.message}",
+                toolType = "CALENDAR"
+            )
+        }
+    }
+
+    private fun executeCalculateMath(args: JSONObject): ActionResult {
+        val expr = args.optString("expression", "").trim()
+        if (expr.isBlank()) {
+            return ActionResult(
+                success = false,
+                summary = "Empty expression",
+                toolType = "MATH"
+            )
+        }
+
+        return try {
+            val clean = expr.replace(" ", "")
+            val result = simpleEvaluate(clean)
+            val formatted = if (result % 1.0 == 0.0) result.toLong().toString() else String.format(Locale.getDefault(), "%.4f", result)
+            ActionResult(
+                success = true,
+                summary = "$expr = $formatted",
+                toolType = "MATH",
+                payload = formatted
+            )
+        } catch (e: Exception) {
+            ActionResult(
+                success = false,
+                summary = "Calculation error for '$expr': ${e.message}",
+                toolType = "MATH"
+            )
+        }
+    }
+
+    private fun simpleEvaluate(str: String): Double {
+        return object : Any() {
+            var pos = -1
+            var ch = 0
+
+            fun nextChar() {
+                ch = if (++pos < str.length) str[pos].code else -1
+            }
+
+            fun eat(charToEat: Int): Boolean {
+                while (ch == ' '.code) nextChar()
+                if (ch == charToEat) {
+                    nextChar()
+                    return true
+                }
+                return false
+            }
+
+            fun parse(): Double {
+                nextChar()
+                val x = parseExpression()
+                if (pos < str.length) throw RuntimeException("Unexpected character: " + ch.toChar())
+                return x
+            }
+
+            fun parseExpression(): Double {
+                var x = parseTerm()
+                while (true) {
+                    when {
+                        eat('+'.code) -> x += parseTerm()
+                        eat('-'.code) -> x -= parseTerm()
+                        else -> return x
+                    }
+                }
+            }
+
+            fun parseTerm(): Double {
+                var x = parseFactor()
+                while (true) {
+                    when {
+                        eat('*'.code) -> x *= parseFactor()
+                        eat('/'.code) -> x /= parseFactor()
+                        eat('%'.code) -> x %= parseFactor()
+                        else -> return x
+                    }
+                }
+            }
+
+            fun parseFactor(): Double {
+                if (eat('+'.code)) return +parseFactor()
+                if (eat('-'.code)) return -parseFactor()
+
+                var x: Double
+                val startPos = pos
+                if (eat('('.code)) {
+                    x = parseExpression()
+                    eat(')'.code)
+                } else if ((ch in '0'.code..'9'.code) || ch == '.'.code) {
+                    while ((ch in '0'.code..'9'.code) || ch == '.'.code) nextChar()
+                    x = str.substring(startPos, pos).toDouble()
+                } else {
+                    throw RuntimeException("Unexpected token: " + ch.toChar())
+                }
+
+                if (eat('^'.code)) x = Math.pow(x, parseFactor())
+                return x
+            }
+        }.parse()
+    }
+
+    private fun executeClickUiElement(args: JSONObject): ActionResult {
+        val targetText = args.optString("target_text", "").trim()
+        val service = SalimAccessibilityService.instance
+            ?: return ActionResult(
+                success = false,
+                summary = "Accessibility Service is not enabled. Enable it in Settings to allow automated UI clicks.",
+                toolType = "ACCESSIBILITY_CLICK"
+            )
+
+        val clicked = service.clickNodeByText(targetText)
+        return if (clicked) {
+            ActionResult(
+                success = true,
+                summary = "Successfully clicked screen element '$targetText'",
+                toolType = "ACCESSIBILITY_CLICK",
+                payload = targetText
+            )
+        } else {
+            ActionResult(
+                success = false,
+                summary = "Element with text '$targetText' not found on current screen.",
+                toolType = "ACCESSIBILITY_CLICK"
             )
         }
     }

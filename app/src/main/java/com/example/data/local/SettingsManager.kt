@@ -20,6 +20,7 @@ class SettingsManager(context: Context) {
         private const val KEY_VIBRATE = "vibrate_enabled"
         private const val KEY_AUTO_LISTEN = "auto_listen_on_launch"
         private const val KEY_THEME = "theme_mode"
+        private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
 
         const val DEFAULT_SYSTEM_PROMPT = """You are Salim, an exceptionally fast, highly capable, and intelligent Android personal AI assistant designed to replace Google Assistant.
 You speak clearly, concisely, and helpfully.
@@ -54,6 +55,9 @@ Keep spoken responses natural, brief, and to the point without excessive formatt
     private val _themeModeFlow = MutableStateFlow(getThemeMode())
     val themeModeFlow: StateFlow<String> = _themeModeFlow.asStateFlow()
 
+    private val _onboardingCompletedFlow = MutableStateFlow(isOnboardingCompleted())
+    val onboardingCompletedFlow: StateFlow<Boolean> = _onboardingCompletedFlow.asStateFlow()
+
     fun getApiKey(): String {
         val saved = prefs.getString(KEY_API_KEY, "") ?: ""
         return saved.trim()
@@ -66,7 +70,12 @@ Keep spoken responses natural, brief, and to the point without excessive formatt
     }
 
     fun getSelectedModel(): String {
-        return prefs.getString(KEY_MODEL, GroqModels.DEFAULT_MODEL) ?: GroqModels.DEFAULT_MODEL
+        val saved = prefs.getString(KEY_MODEL, GroqModels.DEFAULT_MODEL) ?: GroqModels.DEFAULT_MODEL
+        return if (GroqModels.AVAILABLE_MODELS.any { it.id == saved }) {
+            saved
+        } else {
+            GroqModels.DEFAULT_MODEL
+        }
     }
 
     fun setSelectedModel(modelId: String) {
@@ -135,6 +144,15 @@ Keep spoken responses natural, brief, and to the point without excessive formatt
     fun setThemeMode(mode: String) {
         prefs.edit().putString(KEY_THEME, mode).apply()
         _themeModeFlow.value = mode
+    }
+
+    fun isOnboardingCompleted(): Boolean {
+        return prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+    }
+
+    fun setOnboardingCompleted(completed: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, completed).apply()
+        _onboardingCompletedFlow.value = completed
     }
 
     fun resetSystemPrompt() {

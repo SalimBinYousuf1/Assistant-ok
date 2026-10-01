@@ -2,7 +2,6 @@ package com.example
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -56,11 +55,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import com.example.ui.components.SetupOnboardingSheet
 import com.example.ui.screens.AssistantMainScreen
 import com.example.ui.screens.AssistantQuickSheet
 import com.example.ui.screens.HistoryScreen
@@ -68,11 +68,9 @@ import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.ToolsGuideScreen
 import com.example.ui.theme.FrostCyanDark
 import com.example.ui.theme.FrostCyanPrimary
-import com.example.ui.theme.FrostDarkBorder
 import com.example.ui.theme.FrostDarkBorderHighlight
 import com.example.ui.theme.FrostDarkSurfaceElevated
 import com.example.ui.theme.FrostIrisAccent
-import com.example.ui.theme.FrostLightBorder
 import com.example.ui.theme.FrostLightBorderHighlight
 import com.example.ui.theme.FrostLightSurfaceElevated
 import com.example.ui.theme.MyApplicationTheme
@@ -89,6 +87,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        viewModel.refreshSystemPermissions(this)
         handleAssistantIntent(intent)
 
         setContent {
@@ -103,6 +102,11 @@ class MainActivity : ComponentActivity() {
                 MainAppContent(viewModel = viewModel)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshSystemPermissions(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -125,20 +129,24 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainAppContent(viewModel: AssistantViewModel) {
+    val context = LocalContext.current
     val currentTab by viewModel.currentTab.collectAsState()
     val isQuickSheetOpen by viewModel.isQuickSheetOpen.collectAsState()
     val micPermissionGranted by viewModel.micPermissionGranted.collectAsState()
-    val isDark = isSystemInDarkTheme()
+    val accessibilityActive by viewModel.accessibilityActive.collectAsState()
+    val defaultAssistantSet by viewModel.defaultAssistantSet.collectAsState()
+    val isOnboardingCompleted by viewModel.isOnboardingCompleted.collectAsState()
 
-    // Permission launcher for microphone
+    // Permission launcher for microphone (requested only once during setup)
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         viewModel.setMicPermissionGranted(isGranted)
+        viewModel.refreshSystemPermissions(context)
     }
 
     LaunchedEffect(Unit) {
-        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        viewModel.refreshSystemPermissions(context)
     }
 
     BackHandler(enabled = currentTab != AssistantNavTab.ASSISTANT || isQuickSheetOpen) {
@@ -187,6 +195,26 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                 AssistantQuickSheet(
                     viewModel = viewModel,
                     onDismiss = { viewModel.setQuickSheetOpen(false) }
+                )
+            }
+
+            // Setup Onboarding Overlay (Shown once during setup, never again once completed)
+            AnimatedVisibility(
+                visible = !isOnboardingCompleted && !micPermissionGranted,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                SetupOnboardingSheet(
+                    viewModel = viewModel,
+                    onRequestMicrophone = {
+                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    onComplete = {
+                        viewModel.completeOnboarding()
+                    },
+                    isMicGranted = micPermissionGranted,
+                    isAccessibilityActive = accessibilityActive,
+                    isDefaultAssistant = defaultAssistantSet
                 )
             }
         }
