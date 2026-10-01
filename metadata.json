@@ -1,0 +1,6 @@
+{
+  "name": "Salim",
+  "description": "Intelligent Android AI Assistant powered by Groq API with instant voice interactions, smart tools, and system automation to replace Google Assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

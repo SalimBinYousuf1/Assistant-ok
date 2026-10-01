@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Salim</string>
+    <string name="assist_tile_label">Salim Assistant</string>
+    <string name="assist_tile_description">Quickly summon Salim AI Assistant</string>
+</resources>
